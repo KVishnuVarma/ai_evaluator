@@ -54,7 +54,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/papers', paperRoutes);
 app.use('/api/teachers', teacherRoutes);
-app.use('/api/spocs', spocRoutes);
+app.use('/api/spoc', spocRoutes);
 app.use('/api/otp', otpRoutes);
 
 // Health check endpoint

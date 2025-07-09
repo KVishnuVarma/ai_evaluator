@@ -7,7 +7,8 @@ import {
   getSpocStudents,
   addStudentToSpoc,
   removeStudentFromSpoc,
-  getSpocReports
+  getSpocReports,
+  createSpocFull
 } from '../controllers/spocController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { requireRole } from '../middlewares/roleMiddleware';
@@ -20,6 +21,9 @@ router.use(authenticateToken);
 
 // Create SPOC profile - only admin
 router.post('/', requireRole([ROLES.ADMIN]), createSpoc);
+
+// New: Create both User and Spoc in one endpoint
+router.post('/full', requireRole([ROLES.ADMIN]), createSpocFull);
 
 // Get all SPOCs
 router.get('/', requireRole([ROLES.ADMIN]), getAllSpocs);

@@ -19,7 +19,7 @@ interface AuthContextType {
   logout: () => void;
   isLoading: boolean;
   assignSpoc: (spocData: SpocAssignmentData) => Promise<boolean>;
-  getAssignedSpocs: () => User[];
+  getAssignedSpocs: () => Promise<User[]>;
 }
 
 interface RegisterData {
@@ -122,6 +122,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(data.user);
       localStorage.setItem('user', JSON.stringify(data.user));
       localStorage.setItem('token', data.token);
+      // Store token in memory for API requests
+      window.sessionStorage.setItem('token', data.token);
       return true;
     } catch (error) {
       console.error('Login error:', error);
@@ -129,6 +131,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Patch fetch to always send Authorization header if token exists
+  const fetchWithAuth = async (url: string, options: any = {}) => {
+    const token = window.sessionStorage.getItem('token') || localStorage.getItem('token');
+    const headers = options.headers || {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(url, { ...options, headers, credentials: 'include' });
   };
 
   const register = async (userData: RegisterData, otp?: string): Promise<boolean> => {
@@ -165,21 +177,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user || user.role !== 'admin') {
       return false;
     }
-
     try {
-      const newSpoc: User = {
-        id: Date.now().toString(),
-        name: spocData.name,
-        email: spocData.email,
-        role: 'spoc',
-        subjects: spocData.subjects,
-        assignedBy: user.id
-      };
-
-      const existingSpocs = JSON.parse(localStorage.getItem('spocs') || '[]');
-      existingSpocs.push(newSpoc);
-      localStorage.setItem('spocs', JSON.stringify(existingSpocs));
-      
+      const res = await fetchWithAuth(`${API_BASE_URL}/spoc/full`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: spocData.name,
+          email: spocData.email,
+          password: spocData.password,
+          department: spocData.subjects?.[0] || 'General',
+          subjects: spocData.subjects
+        })
+      });
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('SPOC assignment failed:', errorText);
+        return false;
+      }
       return true;
     } catch (error) {
       console.error('SPOC assignment error:', error);
@@ -187,12 +201,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const getAssignedSpocs = (): User[] => {
+  const getAssignedSpocs = async (): Promise<User[]> => {
     if (!user || user.role !== 'admin') {
       return [];
     }
-    const spocs = JSON.parse(localStorage.getItem('spocs') || '[]');
-    return spocs.filter((spoc: User) => spoc.assignedBy === user.id);
+    try {
+      const res = await fetchWithAuth(`${API_BASE_URL}/spoc?limit=100`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.spocs || []).map((spoc: any) => ({
+        id: spoc.userId?._id || spoc.userId,
+        name: spoc.userId?.name || '',
+        email: spoc.userId?.email || '',
+        role: 'spoc',
+        subjects: spoc.subjects || [],
+        assignedBy: user.id
+      }));
+    } catch (error) {
+      console.error('Get assigned SPOCs error:', error);
+      return [];
+    }
   };
 
   const logout = () => {

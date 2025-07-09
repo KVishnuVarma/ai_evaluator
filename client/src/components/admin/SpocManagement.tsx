@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,9 +20,18 @@ const SpocManagement = () => {
     password: '',
     subjects: [] as string[]
   });
+  const [assignedSpocs, setAssignedSpocs] = useState<any[]>([]);
+  const [loadingSpocs, setLoadingSpocs] = useState(true);
 
   const subjects = ['Mathematics', 'Physics', 'Chemistry', 'English', 'Computer Science', 'Biology'];
-  const assignedSpocs = getAssignedSpocs();
+
+  useEffect(() => {
+    setLoadingSpocs(true);
+    getAssignedSpocs().then((spocs) => {
+      setAssignedSpocs(Array.isArray(spocs) ? spocs : []);
+      setLoadingSpocs(false);
+    });
+  }, [getAssignedSpocs]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -56,6 +64,11 @@ const SpocManagement = () => {
       });
       setFormData({ name: '', email: '', password: '', subjects: [] });
       setIsDialogOpen(false);
+      setLoadingSpocs(true);
+      getAssignedSpocs().then((spocs) => {
+        setAssignedSpocs(Array.isArray(spocs) ? spocs : []);
+        setLoadingSpocs(false);
+      });
     } else {
       toast({
         title: "Failed to assign SPOC",
@@ -147,7 +160,9 @@ const SpocManagement = () => {
           </div>
         </CardHeader>
         <CardContent>
-          {assignedSpocs.length === 0 ? (
+          {loadingSpocs ? (
+            <div className="text-center py-8 text-gray-500">Loading...</div>
+          ) : assignedSpocs.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
               <p>No SPOCs assigned yet</p>

@@ -262,3 +262,38 @@ const calculateGrade = (percentage: number): string => {
   if (percentage >= 30) return 'D';
   return 'F';
 };
+
+// New: Create both User and Spoc in one endpoint
+export const createSpocFull = asyncHandler(async (req: Request, res: Response) => {
+  const { name, email, password, department, subjects } = req.body;
+  if (!name || !email || !password || !department) {
+    return res.status(400).json({ message: 'Name, email, password, and department are required' });
+  }
+  // Check if user already exists
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    return res.status(400).json({ message: 'User with this email already exists' });
+  }
+  // Create user with role spoc
+  const { hashPassword } = require('../utils/hashUtils');
+  const hashedPassword = await hashPassword(password);
+  const user = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+    role: 'spoc',
+    isActive: true
+  });
+  // Create Spoc profile
+  const spoc = await Spoc.create({
+    userId: user._id,
+    department,
+    subjects: subjects || [],
+    accessLevel: 'department',
+    isActive: true
+  });
+  res.status(201).json({
+    message: 'SPOC created successfully',
+    spoc: await Spoc.findById(spoc._id).populate('userId', 'name email')
+  });
+});
