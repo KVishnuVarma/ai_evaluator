@@ -1,6 +1,10 @@
 // index.ts (Updated)
-import express from 'express';
 import dotenv from 'dotenv';
+dotenv.config();
+console.log('GMAIL_USER:', process.env.GMAIL_USER);
+console.log('GMAIL_PASS:', process.env.GMAIL_PASS ? '***HIDDEN***' : 'NOT SET');
+
+import express from 'express';
 import fileUpload from 'express-fileupload';
 import cors from 'cors';
 import path from 'path';
@@ -12,17 +16,20 @@ import userRoutes from './routes/userRoutes';
 import paperRoutes from './routes/paperRoutes';
 import teacherRoutes from './routes/teacherRoutes';
 import spocRoutes from './routes/spocRoutes';
+import otpRoutes from './routes/otpRoutes';
 
 // Import middleware
 import { errorHandler } from './middlewares/errorHandler';
-
-dotenv.config();
 
 const app = express();
 
 // Middleware
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:8080',
+    'http://localhost:5173'
+  ],
   credentials: true
 }));
 
@@ -48,6 +55,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/papers', paperRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/spocs', spocRoutes);
+app.use('/api/otp', otpRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

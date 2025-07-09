@@ -6,6 +6,59 @@ import { asyncHandler } from '../middlewares/errorHandler';
 import { hashPassword } from '../utils/hashUtils';
 import { AuthenticatedRequest } from '../middlewares/authMiddleware';
 
+export const getStudentResults = asyncHandler(async (req: Request, res: Response) => {
+  // In a real app, fetch results from a Result model or similar
+  // Here, return mock data for demonstration
+  const results = [
+    {
+      id: '1',
+      subject: 'Mathematics',
+      examTitle: 'Mid-term Examination',
+      score: 85,
+      totalMarks: 100,
+      grade: 'A',
+      date: '2024-01-15',
+      feedback: 'Excellent understanding of algebraic concepts. Work on calculation accuracy.',
+      aiSuggestions: [
+        'Practice more arithmetic problems daily',
+        'Focus on double-checking calculations',
+        'Review quadratic equations chapter'
+      ]
+    },
+    {
+      id: '2',
+      subject: 'Physics',
+      examTitle: 'Unit Test - Mechanics',
+      score: 78,
+      totalMarks: 100,
+      grade: 'B+',
+      date: '2024-01-12',
+      feedback: 'Good conceptual understanding. Improve problem-solving speed.',
+      aiSuggestions: [
+        'Practice numerical problems regularly',
+        'Memorize important physics formulas',
+        'Work on time management during exams'
+      ]
+    },
+    {
+      id: '3',
+      subject: 'Chemistry',
+      examTitle: 'Weekly Quiz',
+      score: 92,
+      totalMarks: 100,
+      grade: 'A+',
+      date: '2024-01-10',
+      feedback: 'Outstanding performance! Keep up the excellent work.',
+      aiSuggestions: [
+        'Continue current study approach',
+        'Help classmates with chemistry concepts',
+        'Prepare for advanced topics'
+      ]
+    }
+  ];
+  res.json({ results });
+});
+
 export const getAllUsers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { role, page = 1, limit = 10, search } = req.query;
   

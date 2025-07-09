@@ -4,7 +4,8 @@ import {
   getUserById,
   updateUser,
   deleteUser,
-  resetPassword
+  resetPassword,
+  getStudentResults
 } from '../controllers/userController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { requireRole } from '../middlewares/roleMiddleware';
@@ -21,5 +22,8 @@ router.get('/:id', requireRole([ROLES.ADMIN, ROLES.SPOC]), getUserById);
 router.put('/:id', requireRole([ROLES.ADMIN, ROLES.SPOC]), updateUser);
 router.delete('/:id', requireRole([ROLES.ADMIN]), deleteUser);
 router.put('/:id/reset-password', requireRole([ROLES.ADMIN, ROLES.SPOC]), resetPassword);
+
+// Student can get their results
+router.get('/:id/results', getStudentResults);
 
 export default router;
