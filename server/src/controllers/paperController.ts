@@ -10,22 +10,24 @@ import { generateFileName } from '../utils/generateFileName';
 import { OCRService } from '../services/ocrService';
 import { GradingService } from '../services/gradingService';
 
+// Upload Paper
 export const uploadPaper = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { rollNo, subject, examDate, maxMarks, title } = req.body;
-  const file = (req as any).files?.paper;
+  const { rollNo, subject, examDate, maxMarks, title, rubric } = req.body;
+  const questionPaper = (req as any).files?.questionPaper;
+  const answerSheet = (req as any).files?.answerSheet;
 
-  if (!file) {
-    return res.status(400).json({ message: 'Paper file is required' });
+  if (!questionPaper || !answerSheet) {
+    return res.status(400).json({ message: 'Both question paper and answer sheet files are required' });
   }
-
   if (!rollNo || !subject || !examDate || !maxMarks || !title) {
     return res.status(400).json({ message: 'All fields are required' });
   }
 
-  // Validate file type
+  // Validate file types
   const allowedTypes = ['.pdf', '.jpg', '.jpeg', '.png', '.tiff'];
-  const fileExtension = path.extname(file.name).toLowerCase();
-  if (!allowedTypes.includes(fileExtension)) {
+  const qpExt = path.extname(questionPaper.name).toLowerCase();
+  const asExt = path.extname(answerSheet.name).toLowerCase();
+  if (!allowedTypes.includes(qpExt) || !allowedTypes.includes(asExt)) {
     return res.status(400).json({ message: 'Invalid file type' });
   }
 
@@ -35,36 +37,38 @@ export const uploadPaper = asyncHandler(async (req: AuthenticatedRequest, res: R
     return res.status(404).json({ message: 'Student not found' });
   }
 
-  // Generate unique filename
-  const fileName = generateFileName(file.name, 'paper');
+  // Generate unique filenames
   const uploadDir = path.join(__dirname, '../uploads/papers');
-  
-  // Ensure upload directory exists
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
   }
-
-  const filePath = path.join(uploadDir, fileName);
-
-  // Move file to upload directory
-  await file.mv(filePath);
+  const qpFileName = generateFileName(questionPaper.name, 'question');
+  const asFileName = generateFileName(answerSheet.name, 'answer');
+  const qpPath = path.join(uploadDir, qpFileName);
+  const asPath = path.join(uploadDir, asFileName);
+  await questionPaper.mv(qpPath);
+  await answerSheet.mv(asPath);
 
   // Create paper record
   const paper = await Paper.create({
     studentId: student._id,
     rollNo,
+    name: student.name,
+    section: student.section,
     title,
-    filePath,
-    originalFileName: file.name,
+    questionPaper: qpPath,
+    answerPaper: asPath,
+    originalFileName: questionPaper.name + '|' + answerSheet.name,
     subject,
     examDate: new Date(examDate),
     maxMarks: Number(maxMarks),
     submittedBy: req.user!._id,
-    status: 'uploaded'
+    status: 'uploaded',
+    rubric: rubric || '',
   });
 
-  // Start OCR processing asynchronously
-  processOCRAndGrading(paper._id);
+  // Start OCR and AI grading
+  processOCRAndGrading(paper._id, qpPath, asPath, rubric, Number(maxMarks), subject);
 
   res.status(201).json({
     message: 'Paper uploaded successfully',
@@ -80,31 +84,46 @@ export const uploadPaper = asyncHandler(async (req: AuthenticatedRequest, res: R
   });
 });
 
-const processOCRAndGrading = async (paperId: string) => {
+// OCR and AI Grading
+const processOCRAndGrading = async (
+  paperId: string,
+  qpPath: string,
+  asPath: string,
+  rubric: any,
+  maxMarks: number,
+  subject: string
+) => {
   try {
-    const paper = await Paper.findById(paperId);
-    if (!paper) return;
+    // OCR both files
+    const questionOcr = await OCRService.processFile(qpPath);
+    const answerOcr = await OCRService.processFile(asPath);
 
-    // Extract text using OCR
-    const ocrResult = await OCRService.processFile(paper.filePath);
-    
-    // Update paper with OCR text
-    await Paper.findByIdAndUpdate(paperId, {
-      ocrText: ocrResult.text
-    });
+    // Parse rubric if string
+    let rubricObj = {};
+    if (typeof rubric === 'string') {
+      try {
+        rubricObj = JSON.parse(rubric);
+      } catch {
+        rubricObj = {};
+      }
+    } else if (typeof rubric === 'object' && rubric !== null) {
+      rubricObj = rubric;
+    }
 
-    // Grade with AI
+    // AI grading: combine questions and answers into a single string
+    const combinedText = `Questions:\n${questionOcr.text}\n\nAnswers:\n${answerOcr.text}`;
     const gradingResult = await GradingService.gradeWithAI(
-      ocrResult.text,
+      combinedText,
       {
-        subject: paper.subject,
-        maxMarks: paper.maxMarks,
-        rubric: {} // Add subject-specific rubric
+        subject: subject || '',
+        maxMarks,
+        rubric: rubricObj
       }
     );
 
-    // Update paper with AI grading
+    // Save report (no details field)
     await Paper.findByIdAndUpdate(paperId, {
+      ocrText: { questions: questionOcr.text, answers: answerOcr.text },
       aiGrade: {
         score: gradingResult.score,
         feedback: gradingResult.feedback,
@@ -113,16 +132,13 @@ const processOCRAndGrading = async (paperId: string) => {
       },
       status: 'ai_graded'
     });
-
   } catch (error) {
     console.error('OCR and grading processing error:', error);
-    // Update status to indicate processing failed
-    await Paper.findByIdAndUpdate(paperId, {
-      status: 'uploaded' // Keep as uploaded for manual processing
-    });
+    await Paper.findByIdAndUpdate(paperId, { status: 'uploaded' }, { new: true });
   }
 };
 
+// Get all papers
 export const getAllPapers = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { status, subject, page = 1, limit = 10, rollNo } = req.query;
   const user = req.user!;
@@ -133,7 +149,6 @@ export const getAllPapers = asyncHandler(async (req: AuthenticatedRequest, res: 
   if (user.role === 'student') {
     filter.studentId = user._id;
   } else if (user.role === 'teacher') {
-    // Teachers see papers assigned to them or in their subjects
     filter.$or = [
       { 'teacherReview.teacherId': user._id },
       { subject: { $in: await getTeacherSubjects(String(user._id)) } }
@@ -168,6 +183,7 @@ const getTeacherSubjects = async (teacherId: string): Promise<string[]> => {
   return teacher?.subjects || [];
 };
 
+// Get paper by ID
 export const getPaperById = asyncHandler(async (req: Request, res: Response) => {
   const paper = await Paper.findById(req.params.id)
     .populate('studentId', 'name rollNo email');
@@ -179,6 +195,7 @@ export const getPaperById = asyncHandler(async (req: Request, res: Response) => 
   res.json({ paper });
 });
 
+// Update paper status
 export const updatePaperStatus = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { status, teacherReview, finalGrade } = req.body;
   const paperId = req.params.id;
@@ -219,6 +236,7 @@ export const updatePaperStatus = asyncHandler(async (req: AuthenticatedRequest, 
   });
 });
 
+// Download paper
 export const downloadPaper = asyncHandler(async (req: Request, res: Response) => {
   const paper = await Paper.findById(req.params.id);
 
@@ -226,13 +244,16 @@ export const downloadPaper = asyncHandler(async (req: Request, res: Response) =>
     return res.status(404).json({ message: 'Paper not found' });
   }
 
-  if (!fs.existsSync(paper.filePath)) {
+  // Use answerPaper or questionPaper as needed
+  const filePath = paper.answerPaper || paper.questionPaper;
+  if (!fs.existsSync(filePath)) {
     return res.status(404).json({ message: 'Paper file not found' });
   }
 
-  res.download(paper.filePath, paper.originalFileName);
+  res.download(filePath, paper.originalFileName);
 });
 
+// Get student results
 export const getStudentResults = asyncHandler(async (req: Request, res: Response) => {
   const { rollNo } = req.params;
 

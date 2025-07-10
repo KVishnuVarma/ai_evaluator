@@ -1,350 +1,270 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { CheckCircle, Clock, AlertCircle, Eye, Users, Calendar, MessageSquare, LogOut } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
-import LiveAttendanceSystem from '@/components/attendance/LiveAttendanceSystem';
+import { 
+  Users, 
+  FileText, 
+  BookOpen, 
+  TrendingUp, 
+  Plus,
+  Search,
+  Filter,
+  Eye,
+  Edit,
+  Trash2,
+  Download,
+  UserPlus,
+  BarChart3,
+  Calendar,
+  Award
+} from 'lucide-react';
+import { SpocList } from '@/components/spoc/SpocList';
+import { SpocForm } from '@/components/spoc/SpocForm';
+import { SpocStudents } from '@/components/spoc/SpocStudents';
+import { SpocReports } from '@/components/spoc/SpocReports';
+import { SpocStats } from '@/components/spoc/SpocStats';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface Spoc {
+  _id: string;
+  userId: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  department: string;
+  accessLevel: 'department' | 'institution';
+  managedStudents: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface DashboardStats {
+  totalSpocs: number;
+  activeSpocs: number;
+  totalStudents: number;
+  totalPapers: number;
+  averageGrade: number;
+  pendingReviews: number;
+}
 
 const SpocDashboard = () => {
   const { user, logout } = useAuth();
+  const [spocs, setSpocs] = useState<Spoc[]>([]);
+  const [selectedSpoc, setSelectedSpoc] = useState<Spoc | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [stats, setStats] = useState<DashboardStats>({
+    totalSpocs: 0,
+    activeSpocs: 0,
+    totalStudents: 0,
+    totalPapers: 0,
+    averageGrade: 0,
+    pendingReviews: 0
+  });
+
   const { toast } = useToast();
-  const [selectedResult, setSelectedResult] = useState<any>(null);
 
-  const pendingResults = [
-    {
-      id: 1,
-      studentName: 'John Doe',
-      rollNo: '21CS001',
-      subject: 'Mathematics',
-      examTitle: 'Mid-term Exam',
-      aiScore: 85,
-      totalMarks: 100,
-      submittedBy: 'Admin Teacher',
-      submittedAt: '2024-01-15 10:30 AM',
-      aiAnalysis: 'Strong understanding of algebraic concepts. Minor calculation errors noted.',
-      status: 'pending_review'
-    },
-    {
-      id: 2,
-      studentName: 'Jane Smith',
-      rollNo: '21CS002',
-      subject: 'Mathematics',
-      examTitle: 'Unit Test',
-      aiScore: 78,
-      totalMarks: 100,
-      submittedBy: 'Admin Teacher',
-      submittedAt: '2024-01-15 11:15 AM',
-      aiAnalysis: 'Good problem-solving approach. Needs improvement in time management.',
-      status: 'pending_review'
+  useEffect(() => {
+    fetchDashboardStats();
+    // fetch students/reports for this SPOC's subject(s) here if needed
+  }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      const response = await fetch('/api/spoc/stats', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data.stats);
+      } else {
+        throw new Error('Failed to fetch dashboard stats');
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard stats:', error);
+      setStats({
+        totalSpocs: 0,
+        activeSpocs: 0,
+        totalStudents: 0,
+        totalPapers: 0,
+        averageGrade: 0,
+        pendingReviews: 0
+      });
     }
-  ];
+  };
 
-  const approvedResults = [
-    {
-      id: 3,
-      studentName: 'Mike Johnson',
-      rollNo: '21CS003',
-      subject: 'Mathematics',
-      examTitle: 'Weekly Quiz',
-      finalScore: 92,
-      totalMarks: 100,
-      approvedAt: '2024-01-14 02:30 PM',
-      spocComments: 'Excellent performance. Keep up the good work.',
-      status: 'approved'
+  const handleCreateSpoc = async (spocData: any) => {
+    try {
+      const response = await fetch('/api/spoc/full', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(spocData)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: "Success",
+          description: "SPOC created successfully"
+        });
+        setShowCreateForm(false);
+        fetchDashboardStats();
+      } else {
+        const error = await response.json();
+        throw new Error(error.message);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create SPOC",
+        variant: "destructive"
+      });
     }
-  ];
+  };
 
-  const tickets = [
-    {
-      id: 1,
-      studentName: 'John Doe',
-      rollNo: '21CS001',
-      subject: 'Mathematics',
-      title: 'Query about marks distribution',
-      description: 'I want to understand how marks were distributed for question 3',
-      raisedAt: '2024-01-15 03:20 PM',
-      status: 'open'
+  const handleDeleteSpoc = async (spocId: string) => {
+    if (!confirm('Are you sure you want to delete this SPOC?')) return;
+
+    try {
+      const response = await fetch(`/api/spoc/${spocId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "SPOC deleted successfully"
+        });
+        fetchDashboardStats();
+      } else {
+        throw new Error('Failed to delete SPOC');
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete SPOC",
+        variant: "destructive"
+      });
     }
-  ];
-
-  const handleLogout = () => {
-    logout();
-    toast({
-      title: "Logged out successfully",
-      description: "You have been logged out of your account.",
-    });
   };
-
-  const handleBulkApprove = async () => {
-    toast({
-      title: "Bulk approval completed!",
-      description: `All ${pendingResults.length} results have been approved and released to students.`,
-    });
-  };
-
-  const handleBulkReject = async () => {
-    toast({
-      title: "Results sent back for review",
-      description: "All pending results have been sent back to admin for review.",
-    });
-  };
-
-  const handleApproveResult = async (resultId: number, comments: string = '') => {
-    toast({
-      title: "Result approved successfully!",
-      description: "The result has been released to the student.",
-    });
-  };
-
-  const handleRejectResult = async (resultId: number, reason: string) => {
-    toast({
-      title: "Result sent back for review",
-      description: "The admin has been notified to review the result.",
-    });
-  };
-
-  const ResultReviewDialog = ({ result }: { result: any }) => (
-    <DialogContent className="max-w-2xl">
-      <DialogHeader>
-        <DialogTitle>Review Result - {result.studentName}</DialogTitle>
-      </DialogHeader>
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-600">Student</p>
-            <p className="font-medium">{result.studentName} ({result.rollNo})</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Subject</p>
-            <p className="font-medium">{result.subject}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">Exam</p>
-            <p className="font-medium">{result.examTitle}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">AI Score</p>
-            <p className="font-medium text-blue-600">{result.aiScore}/{result.totalMarks}</p>
-          </div>
-        </div>
-
-        <div>
-          <p className="text-sm text-gray-600 mb-2">AI Analysis</p>
-          <p className="p-3 bg-gray-50 rounded-lg text-sm">{result.aiAnalysis}</p>
-        </div>
-
-        <div>
-          <p className="text-sm text-gray-600 mb-2">SPOC Comments (Optional)</p>
-          <Textarea placeholder="Add your comments about this result..." />
-        </div>
-
-        <div className="flex gap-2">
-          <Button 
-            className="flex-1 bg-green-600" 
-            onClick={() => handleApproveResult(result.id)}
-          >
-            <CheckCircle className="h-4 w-4 mr-2" />
-            Approve & Release
-          </Button>
-          <Button 
-            variant="outline" 
-            className="flex-1 border-red-200 text-red-600"
-            onClick={() => handleRejectResult(result.id, 'Needs review')}
-          >
-            <AlertCircle className="h-4 w-4 mr-2" />
-            Send Back for Review
-          </Button>
-        </div>
-      </div>
-    </DialogContent>
-  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
-      <div className="container mx-auto px-6 py-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">
-              SPOC Dashboard
-            </h1>
-            <div className="flex items-center gap-4 text-gray-600">
-              <span>Welcome, {user?.name}</span>
-              <span>•</span>
-              <span>Subjects: {user?.subjects?.join(', ')}</span>
-            </div>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Logout
-          </Button>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex justify-end items-center mb-2">
+          {user && (
+            <>
+              <span className="mr-4 text-gray-700">{user.name}</span>
+              <Button variant="outline" onClick={logout} className="border-red-500 text-red-600 hover:bg-red-50">Logout</Button>
+            </>
+          )}
+        </div>
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">SPOC Dashboard</h1>
+          <p className="text-gray-600 mt-1">View your subject's students, scores, and reports</p>
         </div>
 
-        <Tabs defaultValue="results" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 bg-white shadow-sm border">
-            <TabsTrigger value="results" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Pending Results
+        <SpocStats stats={stats} />
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3 bg-white/80 backdrop-blur-sm">
+            <TabsTrigger value="overview" className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Overview
             </TabsTrigger>
-            <TabsTrigger value="approved" className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4" />
-              Approved Results
+            <TabsTrigger value="students" className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4" />
+              Students
             </TabsTrigger>
-            <TabsTrigger value="attendance" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Attendance
-            </TabsTrigger>
-            <TabsTrigger value="tickets" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Student Tickets
+            <TabsTrigger value="reports" className="flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Reports
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="results">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-5 w-5 text-orange-500" />
-                    Results Pending Your Review ({pendingResults.length})
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-blue-600" />
+                    Performance Overview
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Average Grade</span>
+                        <span className="font-medium">{stats.averageGrade}%</span>
+                      </div>
+                      <Progress value={stats.averageGrade} className="h-2" />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Active SPOCs Rate</span>
+                        <span className="font-medium">{Math.round((stats.activeSpocs / stats.totalSpocs) * 100)}%</span>
+                      </div>
+                      <Progress value={(stats.activeSpocs / stats.totalSpocs) * 100} className="h-2" />
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={handleBulkApprove}
-                      className="bg-green-600 hover:bg-green-700"
-                      size="sm"
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Approve All ({pendingResults.length})
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={handleBulkReject}
-                      className="border-red-200 text-red-600 hover:bg-red-50"
-                      size="sm"
-                    >
-                      <AlertCircle className="h-4 w-4 mr-2" />
-                      Reject All
-                    </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-green-600" />
+                    Recent Activity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                      <span className="text-sm">New papers submitted</span>
+                      <Badge variant="secondary">12</Badge>
+                    </div>
+                    <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                      <span className="text-sm">Papers graded today</span>
+                      <Badge variant="secondary">8</Badge>
+                    </div>
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-sm">Pending reviews</span>
+                      <Badge variant="destructive">{stats.pendingReviews}</Badge>
+                    </div>
                   </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {pendingResults.map((result) => (
-                    <div key={result.id} className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-200">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-gray-900">{result.studentName}</h3>
-                          <Badge variant="outline">{result.rollNo}</Badge>
-                          <Badge className="bg-orange-100 text-orange-800">{result.subject}</Badge>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-1">{result.examTitle}</p>
-                        <p className="text-xs text-gray-500">
-                          Submitted by {result.submittedBy} at {result.submittedAt}
-                        </p>
-                      </div>
-                      
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="text-lg font-bold text-blue-600">
-                            {result.aiScore}/{result.totalMarks}
-                          </div>
-                          <div className="text-xs text-gray-500">AI Score</div>
-                        </div>
-                        
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button size="sm" onClick={() => setSelectedResult(result)}>
-                              <Eye className="h-4 w-4 mr-2" />
-                              Review
-                            </Button>
-                          </DialogTrigger>
-                          <ResultReviewDialog result={result} />
-                        </Dialog>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
-          <TabsContent value="approved">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  Approved Results ({approvedResults.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {approvedResults.map((result) => (
-                    <div key={result.id} className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-semibold text-gray-900">{result.studentName}</h3>
-                          <Badge variant="outline">{result.rollNo}</Badge>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-1">{result.examTitle}</p>
-                        <p className="text-xs text-gray-500">Approved at {result.approvedAt}</p>
-                      </div>
-                      
-                      <div className="text-right">
-                        <div className="text-lg font-bold text-green-600">
-                          {result.finalScore}/{result.totalMarks}
-                        </div>
-                        <Badge className="bg-green-500 text-xs">Released</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="students">
+            {/* Only show students for this SPOC's subject(s) */}
+            <SpocStudents spoc={user} />
           </TabsContent>
 
-          <TabsContent value="attendance">
-            <LiveAttendanceSystem />
-          </TabsContent>
-
-          <TabsContent value="tickets">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-5 w-5 text-blue-500" />
-                  Student Support Tickets ({tickets.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {tickets.map((ticket) => (
-                    <div key={ticket.id} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{ticket.title}</h3>
-                          <p className="text-sm text-gray-600">
-                            {ticket.studentName} ({ticket.rollNo}) - {ticket.subject}
-                          </p>
-                        </div>
-                        <Badge className="bg-yellow-100 text-yellow-800">Open</Badge>
-                      </div>
-                      <p className="text-sm text-gray-700 mb-3">{ticket.description}</p>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-gray-500">Raised at {ticket.raisedAt}</p>
-                        <Button size="sm">
-                          Reply
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+          <TabsContent value="reports">
+            {/* Only show reports for this SPOC's subject(s) */}
+            <SpocReports spoc={user} />
           </TabsContent>
         </Tabs>
       </div>
